@@ -1,1 +1,0 @@
-# US-States-Gerrymandering-Data-Analysis
