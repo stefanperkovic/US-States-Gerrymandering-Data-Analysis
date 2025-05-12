@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>US Congressional Districts - Gerrymandering Analysis</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body { 
+            font-family: 'Inter', sans-serif; margin: 0; padding: 0; 
+            display: flex; flex-direction: column; align-items: center; background-color: #f4f4f9;
+        }
+        h1 { color: #333; margin-top: 20px; text-align: center; }
+        .controls-container {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            margin: 20px 0;
+            width: 80%;
+            max-width: 1000px;
+            padding: 10px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .controls-container label {
+            font-weight: 500;
+            color: #555;
+        }
+        #state-selector {
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            background-color: white;
+            cursor: pointer;
+            flex-grow: 1; /* Allow selector to take space */
+            max-width: 300px; /* Max width for selector */
+        }
+        #map-container { /* Added a container for the map and its messages */
+            position: relative; /* For positioning messages over the map if needed */
+            height: 65vh; width: 80%; max-width: 1000px; 
+            border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); 
+            background-color: #e9e9e9; /* Light gray background for map div */
+        }
+        #map {
+            height: 100%;
+            width: 100%;
+            border-radius: 8px; /* Ensure map itself also has rounded corners */
+        }
+        .info-panel {
+            width: 80%; max-width: 1000px; padding: 15px; margin-top: 20px; margin-bottom: 30px;
+            background-color: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .info-panel h2 { margin-top: 0; color: #555; }
+        .info-panel p, .info-panel li { margin: 8px 0; line-height: 1.6; }
+        .legend {
+            padding: 6px 8px; font: 14px/16px Arial, Helvetica, sans-serif;
+            background: rgba(255,255,255,0.9); box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            border-radius: 5px;
+        }
+        .legend i { width: 18px; height: 18px; float: left; margin-right: 8px; opacity: 0.8; border: 1px solid #ccc; }
+        .map-message-overlay { /* For messages on top of the map area */
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-align: center; 
+            padding: 30px; 
+            font-size: 1.2em; 
+            color: #777;
+            background-color: rgba(233, 233, 233, 0.8); /* Semi-transparent background */
+            z-index: 1000; /* Ensure it's above map tiles but below popups/controls if needed */
+            border-radius: 8px;
+        }
+        .error-message-text { color: red; } 
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap');
+    </style>
+</head>
+<body>
+    <h1>US Congressional Districts - Gerrymandering Analysis</h1>
+
+    <div class="controls-container">
+        <label for="state-selector">Select a State:</label>
+        <select id="state-selector" onchange="loadStateData()">
+            <option value="">-- Select State --</option>
+        </select>
+    </div>
+
+    <div id="map-container">
+        <div id="map"></div>
+        <div id="map-message-display" class="map-message-overlay" style="display:flex;">Select a state to view its map and analysis.</div>
+    </div>
+
+    <div class="info-panel" id="info-panel-content" style="display:none;">
+        <h2 id="state-name-header">Statewide Metrics</h2>
+        <p><strong>Efficiency Gap:</strong> <span id="efficiency-gap-value">N/A</span> (<span id="efficiency-gap-interpretation">N/A</span>)</p>
+        <p><strong id="comm-conc-title">Community Concentration Scores (>30% CVAP Tracts):</strong></p>
+        <ul id="community-concentration-list" style="list-style-type: none; padding-left: 0;">
+        </ul>
+        <p><small>Note on Concentration Scores: Lower scores (closer to baseline) mean more dispersed. Higher scores indicate more packing.</small></p>
+    </div>
+
+    <script>
+        const statesConfig = {
+            "CA": { name: "California", center: [36.7783, -119.4179], zoom: 5, num_districts: 52 },
+            "FL": { name: "Florida", center: [27.994402, -81.760254], zoom: 6, num_districts: 28 }, 
+            "TX": { name: "Texas", center: [31.9686, -99.9018], zoom: 5, num_districts: 38 },    
+            "GA": { name: "Georgia", center: [32.1656, -82.9001], zoom: 6, num_districts: 14 },
+            "AR": { name: "Arkansas", center: [34.799999, -92.199997], zoom: 6, num_districts: 4 },
+        };
+
+        const mapMessageDisplay = document.getElementById('map-message-display');
+        const map = L.map('map', { preferCanvas: true }); 
+        let geojsonLayer;
+        let legend = L.control({position: 'bottomright'});
+        let currentSummaryData = null; 
+        let legendAdded = false;
+
+        const stateSelector = document.getElementById('state-selector');
+        for (const abbr in statesConfig) {
+            const option = document.createElement('option');
+            option.value = abbr;
+            option.textContent = statesConfig[abbr].name;
+            stateSelector.appendChild(option);
+        }
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 18,
+            attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        legend.onAdd = function (mapInstance) { // Renamed map to mapInstance to avoid conflict
+            const div = L.DomUtil.create('div', 'info legend');
+            const grades = [0, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4]; 
+            const labels = ['<strong>Polsby-Popper Score</strong>'];
+            for (let i = 0; i < grades.length; i++) {
+                labels.push(
+                    '<i style="background:' + getPolsbyPopperColor(grades[i] + 0.001) + '"></i> ' +
+                    grades[i] + (grades[i + 1] ? '&ndash;' + grades[i + 1] : '+'));
+            }
+            labels.push('<i style="background:#DDDDDD"></i> N/A / Missing');
+            div.innerHTML = labels.join('<br>');
+            return div;
+        };
+        
+        function getPolsbyPopperColor(score) {
+            if (score === null || score === undefined || isNaN(score)) return '#DDDDDD';
+            return score > 0.4  ? '#2ca25f' : score > 0.3  ? '#66c2a4' :
+                   score > 0.2  ? '#b2e2e2' : score > 0.15 ? '#fee08b' :
+                   score > 0.1  ? '#fdae61' : score > 0.05 ? '#f46d43' : '#d53e4f';
+        }
+
+        function styleDistrict(feature) {
+            return {
+                fillColor: getPolsbyPopperColor(feature.properties.polsby_popper),
+                weight: 1, opacity: 1, color: 'grey', fillOpacity: 0.65
+            };
+        }
+
+        function onEachFeature(feature, layer) {
+            layer.on({
+                mouseover: function(e) {
+                    const props = e.target.feature.properties;
+                    const districtId = props.DISTRICT || props.DISTRICT_ID || props.District || props.GEOID || props.DISTRICTNO || 'N/A';
+                    layer.bindTooltip(`<b>District: ${districtId}</b><br>P-P Score: ${props.polsby_popper ? props.polsby_popper.toFixed(4) : 'N/A'}`).openTooltip();
+                    e.target.setStyle({ weight: 2.5, color: '#555', fillOpacity: 0.85 });
+                    if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
+                        e.target.bringToFront();
+                    }
+                },
+                mouseout: function(e) {
+                    if (geojsonLayer) geojsonLayer.resetStyle(e.target);
+                    layer.closeTooltip();
+                },
+                click: function(e) {
+                    const props = e.target.feature.properties;
+                    const districtId = props.DISTRICT || props.DISTRICT_ID || props.District || props.GEOID || props.DISTRICTNO || 'N/A';
+                    const ppScore = props.polsby_popper ? props.polsby_popper.toFixed(4) : 'N/A';
+                    
+                    const demVotes = props.estimated_dem_votes_tract ? props.estimated_dem_votes_tract.toLocaleString() : 'N/A';
+                    const repVotes = props.estimated_rep_votes_tract ? props.estimated_rep_votes_tract.toLocaleString() : 'N/A';
+                    
+                    let cvapHtml = '';
+                    if(props.pct_cvap_black_dist !== undefined && props.pct_cvap_black_dist !== null) cvapHtml += `CVAP % Black (District): ${props.pct_cvap_black_dist.toFixed(2)}%<br>`;
+                    if(props.pct_cvap_hispanic_dist !== undefined && props.pct_cvap_hispanic_dist !== null) cvapHtml += `CVAP % Hispanic (District): ${props.pct_cvap_hispanic_dist.toFixed(2)}%<br>`;
+                    if(props.pct_cvap_asian_dist !== undefined && props.pct_cvap_asian_dist !== null) cvapHtml += `CVAP % Asian (District): ${props.pct_cvap_asian_dist.toFixed(2)}%<br>`;
+
+                    const stateWideEfficiencyGap = currentSummaryData ? 
+                        `${currentSummaryData.efficiency_gap !== null ? currentSummaryData.efficiency_gap.toFixed(4) : 'N/A'} (${currentSummaryData.efficiency_gap_interpretation || 'N/A'})`
+                        : "N/A";
+
+                    L.popup({maxWidth: 350}) 
+                        .setLatLng(e.latlng)
+                        .setContent(`
+                            <b>District ${districtId}</b><br>
+                            Polsby-Popper Score: ${ppScore}<br><hr>
+                            Est. Dem Votes (2020): ${demVotes}<br>
+                            Est. Rep Votes (2020): ${repVotes}<br><hr>
+                            ${cvapHtml || 'CVAP Data N/A<br>'}
+                            <hr>
+                            <em>Statewide Efficiency Gap: ${stateWideEfficiencyGap}</em>
+                        `)
+                        .openOn(map);
+                }
+            });
+        }
+        
+        function setMapDisplayMessage(message, isError = false) {
+            mapMessageDisplay.innerHTML = message;
+            mapMessageDisplay.className = `map-message-overlay ${isError ? 'error-message-text' : ''}`;
+            mapMessageDisplay.style.display = 'flex';
+        }
+
+        async function loadStateData() {
+            const stateAbbr = document.getElementById('state-selector').value;
+            currentSummaryData = null; 
+            if (geojsonLayer) {
+                map.removeLayer(geojsonLayer);
+                geojsonLayer = null;
+            }
+            if (legendAdded) { // Remove legend if it was added for a previous state
+                map.removeControl(legend);
+                legendAdded = false;
+            }
+            map.invalidateSize(); // Invalidate size before showing loading message
+
+            if (!stateAbbr) {
+                setMapDisplayMessage('Select a state to view its map and analysis.');
+                document.getElementById('info-panel-content').style.display = 'none';
+                return;
+            }
+
+            const config = statesConfig[stateAbbr];
+            setMapDisplayMessage('Loading map data for ' + config.name + '...');
+            document.getElementById('info-panel-content').style.display = 'none';
+
+            const geojsonPath = `./results/${stateAbbr}/${stateAbbr}_districts_metrics.geojson`;
+            const summaryPath = `./results/${stateAbbr}/${stateAbbr}_state_summary.json`;
+
+            try {
+                const summaryResponse = await fetch(summaryPath);
+                if (!summaryResponse.ok) throw new Error(`Failed to load summary JSON for ${stateAbbr}: ${summaryResponse.statusText} (Path: ${summaryPath})`);
+                currentSummaryData = await summaryResponse.json();
+                console.log(`Loaded summary data for ${stateAbbr}:`, JSON.stringify(currentSummaryData, null, 2));
+
+                const geojsonResponse = await fetch(geojsonPath);
+                if (!geojsonResponse.ok) throw new Error(`Failed to load district GeoJSON for ${stateAbbr}: ${geojsonResponse.statusText} (Path: ${geojsonPath})`);
+                const districtData = await geojsonResponse.json();
+                console.log(`Loaded GeoJSON data for ${stateAbbr}: Feature count = ${districtData.features ? districtData.features.length : 'N/A'}`);
+
+                if (!districtData || !districtData.features || districtData.features.length === 0) {
+                    throw new Error(`GeoJSON for ${stateAbbr} is empty or has no features.`);
+                }
+                // Log details of the first feature to help debug
+                console.log(`First feature for ${stateAbbr}:`, JSON.stringify(districtData.features[0], null, 2));
+                if (!districtData.features[0].geometry) {
+                     throw new Error(`First feature in GeoJSON for ${stateAbbr} is missing geometry.`);
+                }
+
+
+                mapMessageDisplay.style.display = 'none'; // Hide message overlay
+                map.invalidateSize(); // Ensure map dimensions are correct before adding layer
+
+                geojsonLayer = L.geoJson(districtData, {
+                    style: styleDistrict,
+                    onEachFeature: onEachFeature
+                }).addTo(map);
+
+                if (geojsonLayer.getBounds().isValid()) {
+                    map.fitBounds(geojsonLayer.getBounds());
+                } else {
+                    console.warn(`GeoJSON bounds for ${stateAbbr} are not valid. Setting view to configured center/zoom.`);
+                    map.setView(config.center, config.zoom); 
+                }
+                
+                if (!legendAdded) {
+                    legend.addTo(map);
+                    legendAdded = true; 
+                }
+
+                // Update info panel
+                document.getElementById('state-name-header').textContent = `Statewide Metrics for ${currentSummaryData.state_name}`;
+                document.getElementById('efficiency-gap-value').textContent = `${currentSummaryData.efficiency_gap !== null ? currentSummaryData.efficiency_gap.toFixed(4) : 'N/A'}`;
+                document.getElementById('efficiency-gap-interpretation').textContent = `${currentSummaryData.efficiency_gap_interpretation || 'N/A'}`;
+                
+                const commConcList = document.getElementById('community-concentration-list');
+                commConcList.innerHTML = ''; 
+                if (currentSummaryData.community_concentration && currentSummaryData.community_concentration.length > 0) {
+                    document.getElementById('comm-conc-title').style.display = 'block';
+                    currentSummaryData.community_concentration.forEach(item => {
+                        const listItem = document.createElement('li');
+                        const baselineText = item.baseline !== null ? `(Baseline for ${config.num_districts} Dists: ${item.baseline.toFixed(3)})` : '';
+                        listItem.innerHTML = `
+                            ${item.group} Communities: 
+                            <strong>${item.score !== null ? item.score.toFixed(3) : 'N/A'}</strong> 
+                            ${baselineText} - Interpretation: ${item.interpretation || 'N/A'}
+                            <small>(${item.total_high_conc_tracts} high-conc. tracts statewide)</small>
+                        `;
+                        commConcList.appendChild(listItem);
+                    });
+                } else {
+                     document.getElementById('comm-conc-title').style.display = 'none';
+                }
+                document.getElementById('info-panel-content').style.display = 'block';
+
+            } catch (error) {
+                console.error('Error loading state data:', error);
+                setMapDisplayMessage(
+                    `Failed to load data for ${config.name}.<br>
+                    Please ensure GeoJSON and summary JSON files are available at the correct paths and are correctly formatted.<br>
+                    Attempted GeoJSON Path: <code>${geojsonPath}</code><br>
+                    Attempted Summary Path: <code>${summaryPath}</code><br>
+                    Error: ${error.message}`, true); // Pass true for isError
+                document.getElementById('info-panel-content').style.display = 'none';
+                // Do not remove legend on error, it might be from a previous successful load
+            }
+        }
+        map.setView([39.8283, -98.5795], 4); // Default view of USA
+
+    </script>
+</body>
+</html>

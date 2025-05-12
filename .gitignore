@@ -1,0 +1,145 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+*.manifest
+*.spec
+
+# PyInstaller
+# *.manifest
+# *.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.hypothesis/
+.pytest_cache/
+pytestdebug.log
+junitcov.xml
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# Virtual environments
+.env
+.venv/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# VS Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Icon?
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# --- Project Specific ---
+
+# Ignore all CSV files within any subdirectory of StateData
+# This will ignore your voter files and CVAP files if they are CSVs.
+StateData/**/*.csv
+
+# Ignore all files and subfolders within the results directory
+results/
+
+# If you still want to track the empty directory structure for results (e.g., results/CA/, results/FL/)
+# but ignore all files within them, you could do:
+# results/**/*
+# !results/**/
+# !results/*/.gitkeep
+# (And then add an empty .gitkeep file in each state's results subfolder you want to track as an empty dir)
+# However, simply ignoring `results/` is more straightforward if you don't need to track the empty dirs.
+
+# You might still want to track your shapefiles if they are not too large,
+# or if they are essential for others to run the code without finding them separately.
+# If shapefiles are also too large, you can ignore them too:
+# StateData/**/*.shp
+# StateData/**/*.dbf
+# StateData/**/*.shx
+# StateData/**/*.prj
+# (and other shapefile components)
