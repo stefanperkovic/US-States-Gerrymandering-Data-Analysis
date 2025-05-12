@@ -31,28 +31,6 @@ This project aims to analyze congressional district maps for various US states t
     * Formula: `Sum(s_d^2)` where `s_d` is the share of statewide high-concentration tracts of a minority group located in district `d`.
     * Interpretation: Compares the score to a baseline of `1 / Number_of_Districts` (perfectly even spread). Scores closer to 1.0 indicate higher packing of the specified community into fewer districts.
 
-## File Structure Overview
-
-
-GerymanderingProject/
-├── StateAnalysis/                 # Python scripts/notebooks for state analyses (e.g., analyze_texas.py)
-├── StateData/                     # Raw data for each state
-│   ├── XX/                        # State-specific subfolder (e.g., CA, TX, FL)
-│   │   ├── voter_files/
-│   │   ├── cvap_data/
-│   │   └── shapefiles/
-│   └── ...
-├── results/                       # Output from Python analysis scripts
-│   ├── XX/                        # State-specific subfolder
-│   │   ├── XX_districts_metrics.geojson  # For the map
-│   │   ├── XX_state_summary.json         # For the info panel
-│   │   ├── XX_compactness_map.png
-│   │   └── XX_efficiency_gap_details.csv
-│   └── ...
-├── multi_state_map_frontend_v2.html # The main HTML file for the map viewer
-└── README.md                      # This file
-└── .gitignore                     # Specifies intentionally untracked files by Git
-
 ## How to View the Frontend Map
 
 1.  **Start a Local Web Server:**
